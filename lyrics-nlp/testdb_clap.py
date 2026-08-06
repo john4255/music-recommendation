@@ -1,12 +1,10 @@
 import chromadb
-import text2emotion as emo
 import pandas as pd
 import os
 import numpy as np
-import heapq
 
 client = chromadb.PersistentClient(path="./chroma_db")
-collection = client.get_or_create_collection("songs")
+collection = client.get_or_create_collection("songs_clap")
 
 mp3_ids = []
 genres = os.listdir('../data/MP3-Example')
@@ -26,7 +24,6 @@ users_test = listening_df.groupby('user_id').filter(lambda x: len(x) > 20)
 
 n_success_agg = []
 n_benchmark_agg = []
-use_emotions = False
 query_sz = 3
 num_recs = 200
 
@@ -35,37 +32,18 @@ for user_id in users_test['user_id']:
 
     predictors = top_tracks[:query_sz]
     vectors = []
-    emotions = {'Angry': 0.0, 'Surprise': 0.0, 'Sad': 0.0, 'Fear': 0.0, 'Happy': 0.0}
     for track_id in predictors:
         result = collection.get(
             ids=[track_id],
             include=["documents", "embeddings", "metadatas"],
         )
         vectors.append(result['embeddings'][0])
-        for key, val in result['metadatas'][0].items():
-            if key in emotions:
-                emotions[key] += val
-    top_emotions = heapq.nlargest(3, emotions, key=emotions.get)
-    # lowest_emotion = heapq.nlargest(1, emotions, key=lambda x: -emotions.get(x))[0]
 
-    if not use_emotions:
-        similar_docs = collection.query(
-            query_embeddings=vectors,
-            n_results=num_recs,
-            where={"id": {"$nin": list(predictors)}}
-        )
-    else:
-        similar_docs = collection.query(
-            query_embeddings=vectors,
-            n_results=100,
-            where={"$or": [
-                {"Top-Emotions": {"$contains": top_emotions[0]}},
-                {"Top-Emotions": {"$contains": top_emotions[1]}},
-                {"Top-Emotions": {"$contains": top_emotions[2]}},
-            ]}
-            # where={"Top-Emotions": {"$not_contains": lowest_emotion}}
-
-        )
+    similar_docs = collection.query(
+        query_embeddings=vectors,
+        n_results=num_recs,
+        where={"id": {"$nin": list(predictors)}}
+    )
 
     sim_track_ids = similar_docs['ids'][0]
 
